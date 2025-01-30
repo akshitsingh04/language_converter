@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:translator/translator.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:permission_handler/permission_handler.dart';
 
 class LanguageConverter extends StatefulWidget {
   @override
@@ -32,7 +33,7 @@ class _LanguageConverterState extends State<LanguageConverter> {
     try {
       final inputText = _controller.text;
 
-      // Translate the text using the translator package
+      // Translate the text using the selected languages
       var translated = await _translator.translate(inputText, from: _fromLanguage, to: _toLanguage);
 
       setState(() {
@@ -46,26 +47,54 @@ class _LanguageConverterState extends State<LanguageConverter> {
     }
   }
 
+  // Request microphone permission
+  Future<void> _requestPermissions() async {
+    PermissionStatus status = await Permission.microphone.request();
+    if (status.isGranted) {
+      print('Microphone permission granted');
+    } else if (status.isDenied) {
+      print('Microphone permission denied');
+    } else if (status.isPermanentlyDenied) {
+      // Open app settings if permission is permanently denied
+      openAppSettings();
+    }
+  }
+
   // Start or stop listening for speech input
   void _listenForSpeech() async {
-    if (!_isListening) {
-      bool available = await _speech.initialize();
-      if (available) {
-        setState(() {
-          _isListening = true;
-        });
-        _speech.listen(onResult: (result) {
+    // Request microphone permission before starting speech recognition
+    PermissionStatus status = await Permission.microphone.status;
+    if (status.isGranted) {
+      if (!_isListening) {
+        bool available = await _speech.initialize();
+        if (available) {
           setState(() {
-            _controller.text = result.recognizedWords;
+            _isListening = true;
           });
+          _speech.listen(onResult: (result) {
+            setState(() {
+              _controller.text = result.recognizedWords;
+            });
+          });
+        }
+      } else {
+        setState(() {
+          _isListening = false;
         });
+        _speech.stop();
       }
     } else {
-      setState(() {
-        _isListening = false;
-      });
-      _speech.stop();
+      print('Microphone permission is not granted');
+      // Request permission again if denied
+      _requestPermissions();
     }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Request permissions on app startup
+    _requestPermissions();
   }
 
   @override
